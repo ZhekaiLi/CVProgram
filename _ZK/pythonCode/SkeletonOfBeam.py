@@ -155,8 +155,6 @@ class SkeletonOfBeam:
             self.SkeletonPoints.append(sX*xVec + sY*yVec + sZ*zVec)
         return self.SkeletonPoints
         
-        
-        
     def getNewIntersections(self):
         """Get the intersections of beam along vector [1, 0, 0]
         
@@ -198,6 +196,28 @@ class SkeletonOfBeam:
         tanVec = xVec + sY*yVec + sZ*zVec
         
         return tanVec.astype(np.float64)
+    
+    def showIntersections(self, ifOverlapped=True):
+        """Visualize the intersections in one graph
+        params:
+        ifOverlapped: if True, all intersections will be plotted into one graph
+            else Flase, each intersection will be plotted in order
+        """
+        if ifOverlapped:
+            c2s = []
+            for c3 in self.Intersections:
+                c2, to_3D = c3.to_planar()
+                slices_splited = c2.split()
+                sliceIndex = np.argmax([s.area for s in slices_splited])
+                c2s.append(slices_splited[sliceIndex]) 
+            combined = np.sum(c2s)
+            combined.show()
+        else:
+            for c3 in self.Intersections:
+                c2, to_3D = c3.to_planar()
+                slices_splited = c2.split()
+                sliceIndex = np.argmax([s.area for s in slices_splited])
+                slices_splited[sliceIndex].show()
     
     def _H(self, xs, L, ifsymbol=False): 
         h2 = 1 - 3*xs**2 + 2*xs**3
