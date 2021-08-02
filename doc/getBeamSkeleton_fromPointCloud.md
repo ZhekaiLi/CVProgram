@@ -123,79 +123,39 @@ combined.show()
 # Class: SkeletonOfBeam
 ## 1. Using process
 ```py
+# import classes
+from SkeletonOfBeam import SkeletonOfBeam
+from SkeletonOfBeam import GeometryToolBox
+
 # Create skeletonOfBeam object from a trimesh.mesh and a rough skeleton vector
 sob = SkeletonOfBeam(mesh, rough_normalVector)
 
 # Get intersections first, then get centroids of intersections
 sob.getIntersections(step=1)
-sob.getCentroids()
+sob.getSkeletonPoints()
+
+# Create a new XYZ coordinate with the rough skeleton vector as the x-axis
+# then get projections of SkeletonPoints on the new x-y, x-z plane
+sob.getNewCoordinate()
+sob.getProjections()
+
+# Get the tangent vector at xi=xi_value
+[np.array] sob.returnTangentVectorAtXi(xi_value)
 
 # Read the properties
 [np.array] sob.centroid
 [trimesh.Path3D[]] sob.Intersections
 [np.array[]] sob.Centroids
 ```
+> **A simple example**
+<center>
+    <img src="https://github.com/ZhekaiLi/PICTURE-for-markdown/raw/master/2021-08/Snipaste_2021-08-01_16-32-02.jpg" style="zoom:0%"> <br>
+    <div style="color: #999;"></div>
+</center><br>
+
 
 
 ## 2. Source code 
-```py
-class SkeletonOfBeam:
-    """
-    Get skeleton of beam
 
-    Arributes:
-        mesh: Input trimesh.mesh
-        centroid: An array of the coordinates of mesh's centroid
-        
-        Intersections: A list of trimesh.Path3D
-        Centroids: A list of np.array
-    """
-    mesh = None
-    centroid = None
-    Intersections = None
-    Centroids = None
-    
-    def __init__(self, mesh, rough_normalVector):
-        self.mesh = mesh
-        self.centroid = mesh.centroid.copy()
-        # 质心截面的一个大致的法向量（目前单指 [1, 0, 0]）
-        self.nVec = rough_normalVector
-        
-          
-    def getIntersections(self, step=1):
-        """Get the intersections of beam along vector [1, 0, 0]
-        
-        :param step: interval of intersections
-        """
-        sections = []
-        extents = mesh.bounds[:, 0] # 截取区间
-        levels = np.arange(*extents, step=step)  # 每隔 1m 截一次
-        for i in range(len(levels)):
-            origin_temp = self.centroid.copy()
-            origin_temp[0] = origin_temp[0] + levels[i]
-            try:
-                slice = self.mesh.section(plane_origin=origin_temp,  plane_normal=self.nVec)
-                # 选取每个截面图中面积最大的子图，实现初步去噪
-                if slice is not None:
-                    slice_2D, to_3D = slice.to_planar()
-                    slices_splited = slice_2D.split()
-                    sliceIndex = np.argmax([s.area for s in slices_splited])
-                    slice_2D = slices_splited[sliceIndex]
-                    sections.append(slice_2D.to_3D(to_3D))
-            except:
-                pass
-        
-        self.Intersections = sections
-                
-    def getCentroids(self):   
-        """Get the centroids of intersections
-        """
-        self.Centroids = []
-        for s in self.Intersections:
-            self.Centroids.append(s.centroid)    
-    
-            
-    def returnXYZOfCentroids(self):
-        return np.array(self.Centroids)[:, 0], np.array(self.Centroids)[:, 1], np.array(self.Centroids)[:, 2]
-```
+Temporary code on [github](https://github.com/ZhekaiLi/CVProgram/blob/main/_ZK/readObj/SkeletonOfBeam.py)
 

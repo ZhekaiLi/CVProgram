@@ -34,6 +34,12 @@ class SkeletonOfBeam:
     XYProjections = None
     XZProjections = None
     
+    # Sympy derivation of the projection of skeleton curve on x-y plane
+    # Calculate the derivation value by using dudx_xyPlane.evalf(subs={'xi': xi_value})
+    # where xi_value in [0, 1]
+    dudx_xyPlane = None
+    dudx_xzPlane = None # similar to dudx_xyPlane
+    
     def __init__(self, mesh, rough_normalVector):
         self.mesh = mesh
         self.centroid = mesh.centroid.copy()
@@ -92,11 +98,10 @@ class SkeletonOfBeam:
         self.XYProjections = [GeometryToolBox.projected_point(p, origin, x, y) for p in self.SkeletonPoints]
         self.XZProjections = [GeometryToolBox.projected_point(p, origin, x, z) for p in self.SkeletonPoints]
         
-        
-    def returnTangentVectorAtXi(self, xi_value):
-        """Return the tangent vector at xi=xi_value
+    
+    def getSkeletonEqs(self):
+        """Get the equation of the skeleton curve in x-y, x-z plane
         """
-        xVec, yVec, zVec = self.XYZCoordinate
         xs = np.array(self.XYProjections)[:,0]
         ys = np.array(self.XYProjections)[:,1]
         zs = np.array(self.XZProjections)[:,1]
@@ -105,40 +110,105 @@ class SkeletonOfBeam:
         xis = xs / L
 
         errorValue = lambda x,y,A: y - np.dot(A, x)
-        a_init = np.array([1] * 6)
+        a_init = np.array([1] * 4)
 
-        # Calculate tangent vector's projection on x-y plane
+        # Calculate the derivation equation on x-y plane
         # Get the optimal parameters using least squre error method
         a = sp.optimize.leastsq(errorValue, a_init, args=(ys, self._H(xis, L)))[0]
         
         # Derivation
         xi = sy.symbols('xi')
-        u = (self._H(xi, L, ifsymbol=True) * a).sum()
-        dudx = sy.diff(u, xi) / L
+        self.u_xyPlane = (self._H(xi, L, ifsymbol=True) * a).sum()
         
-        # Calculate the scalar length in y direction
-        # By subsituting the symbol in the derivation with the value
-        s1 = dudx.evalf(subs={'xi': xi_value}) # scalar y
-
-        # Then calculate tangent vector's projection on x-z plane
+        # Then calculate the derivation equation on x-z plane
         a = sp.optimize.leastsq(errorValue, a_init, args=(zs, self._H(xis, L)))[0]
-        dudx = sy.diff(u, xi) / L
-        s2 = dudx.evalf(subs={'xi': xi_value}) # scalar z
-
-        return xVec + s1*yVec + s2*zVec
+        self.u_xzPlane = (self._H(xi, L, ifsymbol=True) * a).sum()
+        
     
-    def _H(self, xs, L, ifsymbol=False):
-        h1 = 1 - xs
+    def getDerivativeSkeletonEqs(self):
+        """Get the derivation of the skeleton curve in x-y, x-z plane
+        """
+        xs = np.array(self.XYProjections)[:,0]
+        L = xs[-1] - xs[0]
+        
+        # Derivation
+        xi = sy.symbols('xi')
+        self.dudx_xyPlane = sy.diff(self.u_xyPlane, xi) / L
+        
+        # Then calculate the derivation equation on x-z plane
+        self.dudx_xzPlane = sy.diff(self.u_xzPlane, xi) / L
+        
+    def getNewSkeletonPoints(self):
+        """Get new centroids according to the curve equations
+        """
+        xVec, yVec, zVec = self.XYZCoordinate
+        xs = np.array(self.XYProjections)[:,0]
+        L = xs[-1] - xs[0]
+        xis = xs / L
+
+        self.SkeletonPoints = []
+        for i in range(len(xis)):
+            xi_value = xis[i]
+            sX = xs[i]
+            sY = self.u_xyPlane.evalf(subs={'xi': xi_value})
+            sZ = self.u_xyPlane.evalf(subs={'xi': xi_value})
+            self.SkeletonPoints.append(sX*xVec + sY*yVec + sZ*zVec)
+        return self.SkeletonPoints
+        
+        
+        
+    def getNewIntersections(self):
+        """Get the intersections of beam along vector [1, 0, 0]
+        
+        :param step: interval of intersections
+        """
+        sections = []
+        xs = np.array(self.XYProjections)[:,0]
+        L = xs[-1] - xs[0]
+        xis = xs / L
+        if len(xis) != len(self.SkeletonPoints):
+            raise Exception("Conflit between xis and SkeletonPoints.", self.SKeletonPoints)
+        for i in range(len(xis)):
+            xi = xis[i]
+            normalVec = self.returnTangentVectorAtXi(xi)
+            originPoint = self.SkeletonPoints[i]
+            try:
+                slice = self.mesh.section(plane_origin=originPoint,  plane_normal=normalVec)
+                # 选取每个截面图中面积最大的子图，实现初步去噪
+                if slice is not None:
+                    slice_2D, to_3D = slice.to_planar()
+                    slices_splited = slice_2D.split()
+                    sliceIndex = np.argmax([s.area for s in slices_splited])
+                    slice_2D = slices_splited[sliceIndex]
+                    sections.append(slice_2D.to_3D(to_3D))
+            except:
+                pass
+        
+        self.Intersections = sections            
+        
+        
+    def returnTangentVectorAtXi(self, xi_value):
+        """Return the tangent vector at xi=xi_value
+        """
+        xVec, yVec, zVec = self.XYZCoordinate
+
+        sY = self.dudx_xyPlane.evalf(subs={'xi': xi_value}) # scalar y
+        sZ = self.dudx_xzPlane.evalf(subs={'xi': xi_value}) # scalar z
+        
+        tanVec = xVec + sY*yVec + sZ*zVec
+        
+        return tanVec.astype(np.float64)
+    
+    def _H(self, xs, L, ifsymbol=False): 
         h2 = 1 - 3*xs**2 + 2*xs**3
         h3 = xs*(1 - 2*xs + xs**2)*L
-        h4 = xs
         h5 = xs**2*(3 - 2*xs)
         h6 = xs**2*(xs - 1)*L
         if ifsymbol:
-            return np.array([h1, h2, h3, h4, h5, h6])
+            return np.array([h2, h3, h5, h6])
         else:
-            return np.hstack((h1.reshape(len(xs), -1), h2.reshape(len(xs), -1), h3.reshape(len(xs), -1), 
-                   h4.reshape(len(xs), -1), h5.reshape(len(xs), -1), h6.reshape(len(xs), -1)))
+            return np.hstack((h2.reshape(len(xs), -1), h3.reshape(len(xs), -1), 
+                              h5.reshape(len(xs), -1), h6.reshape(len(xs), -1)))
         
         
 #----------------------------------------------------------------------------------------------------
