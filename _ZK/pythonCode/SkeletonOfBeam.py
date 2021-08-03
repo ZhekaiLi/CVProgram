@@ -27,6 +27,7 @@ class SkeletonOfBeam:
     centroid = None
     nVec = None
     
+    IntersectionScale = None # scale along the nVec to get Intersections
     Intersections = None
     SkeletonPoints = None # centroids of the intersections
     
@@ -44,16 +45,59 @@ class SkeletonOfBeam:
         self.mesh = mesh
         self.centroid = mesh.centroid.copy()
         # 质心截面的一个大致的法向量（目前单指 [1, 0, 0]）
-        self.nVec = rough_normalVector
+        self.nVec = np.asarray(rough_normalVector)
+        
+    
+    def getScaleAlongSkeletonVec(self):
+        """Get the scale along the input skeleton vector, which then serve for taking intersections
+        """
+        currentScale = 0.2
+        
+        # Get a rough scale
+        ifSliceExist = True     
+        while ifSliceExist:
+            originPoint = self.centroid + currentScale * self.nVec
+            slice = self.mesh.section(plane_origin=originPoint,  plane_normal=self.nVec) # take the slice
+            if slice is None:
+                ifSliceExist = False
+            else:
+                currentScale = currentScale * 2
+             
+        # Get the accurate sacles
+        scales = [0, 0]
+        # Binary Search for positive half
+        leftS = currentScale / 2
+        rightS = currentScale
+        while rightS - leftS > 1e-2:
+            midS = (leftS + rightS) / 2
+            originPoint = self.centroid + midS * self.nVec
+            slice = self.mesh.section(plane_origin=originPoint,  plane_normal=self.nVec)
+            if slice is None: rightS = midS
+            else: leftS = midS
+        scales[1] = leftS
+                
+        # Binary Search for negative half
+        leftS = -currentScale
+        rightS = -currentScale / 2
+        while rightS - leftS > 1e-2:
+            midS = (leftS + rightS) / 2
+            originPoint = self.centroid + midS * self.nVec
+            slice = self.mesh.section(plane_origin=originPoint,  plane_normal=self.nVec)
+            if slice is None: leftS = midS
+            else: rightS = midS
+        scales[0] = rightS
+        
+        self.IntersectionScale = np.asarray(scales)
+            
         
           
-    def getIntersections(self, step):
+    def getIntersectionsFromStep(self, step=1):
         """Get the intersections of beam along vector [1, 0, 0]
         
         :param step: interval of intersections
         """
         sections = []
-        extents = self.mesh.bounds[:, 0] # 截取区间
+        extents = self.IntersectionScale # 截取区间
         levels = np.arange(*extents, step=step)  # 每隔 1m 截一次
         for i in range(len(levels)):
             origin_temp = self.centroid.copy()
@@ -66,11 +110,13 @@ class SkeletonOfBeam:
                     slices_splited = slice_2D.split()
                     sliceIndex = np.argmax([s.area for s in slices_splited])
                     slice_2D = slices_splited[sliceIndex]
-                    sections.append(slice_2D.to_3D(to_3D))
+                    if slice_2D.area > 1e-1:
+                        sections.append(slice_2D.to_3D(to_3D))
             except:
                 pass
         
         self.Intersections = sections
+    
                 
     def getSkeletonPoints(self):   
         """Get the centroids of intersections
@@ -178,7 +224,8 @@ class SkeletonOfBeam:
                     slices_splited = slice_2D.split()
                     sliceIndex = np.argmax([s.area for s in slices_splited])
                     slice_2D = slices_splited[sliceIndex]
-                    sections.append(slice_2D.to_3D(to_3D))
+                    if slice_2D.area > 1e-1:
+                        sections.append(slice_2D.to_3D(to_3D))
             except:
                 pass
         
