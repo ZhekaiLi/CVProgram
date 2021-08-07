@@ -122,12 +122,16 @@ combined.show()
 
 # Class: SkeletonOfBeam
 ## 1. Using process
+> **Main process**
 ```py
 # import classes
 from SkeletonOfBeam import SkeletonOfBeam
 from SkeletonOfBeam import GeometryToolBox
 
 # Create skeletonOfBeam object from a trimesh.mesh and a rough skeleton vector
+# params:
+# mesh：trimesh.Trimesh
+# rough_normalVector: 1*3 np.array
 sob = SkeletonOfBeam(mesh, rough_normalVector)
 
 # Get intersections first, then get centroids of intersections
@@ -139,8 +143,21 @@ sob.getSkeletonPoints()
 sob.getNewCoordinate()
 sob.getProjections()
 
-# Get the tangent vector at xi=xi_value
+# Get skeleton equations and their derivative equations on x-y and x-z plane sperately
+sob.getSkeletonEqs()
+sob.getDerivativeSkeletonEqs()
+
+# Update the centroids and then update the intersections according to these new points and the tangent vector
+sob.getNewSkeletonPoints()
+sob.getNewIntersections()
+```
+```py
+# 
+
+# Calculate the tangent vector at xi=xi_value
 [np.array] sob.returnTangentVectorAtXi(xi_value)
+
+
 
 # Read the properties
 [np.array] sob.centroid

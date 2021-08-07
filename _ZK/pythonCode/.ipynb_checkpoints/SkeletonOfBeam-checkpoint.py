@@ -29,6 +29,7 @@ class SkeletonOfBeam:
     
     IntersectionScale = None # scale along the nVec to get Intersections
     Intersections = None
+    Intersections2D = None
     SkeletonPoints = None # centroids of the intersections
     
     XYZCoordinate = None # 3*3 array, first line = x-axis ...
@@ -65,6 +66,7 @@ class SkeletonOfBeam:
              
         # Get the accurate sacles
         scales = [0, 0]
+        
         # Binary Search for positive half
         leftS = currentScale / 2
         rightS = currentScale
@@ -92,13 +94,39 @@ class SkeletonOfBeam:
         
           
     def getIntersectionsFromStep(self, step=1):
-        """Get the intersections of beam along vector [1, 0, 0]
+        """Get the intersections of beam along nVec
         
         :param step: interval of intersections
         """
         sections = []
         extents = self.IntersectionScale # 截取区间
         levels = np.arange(*extents, step=step)  # 每隔 1m 截一次
+        for i in range(len(levels)):
+            origin_temp = self.centroid.copy()
+            origin_temp[0] = origin_temp[0] + levels[i]
+            try:
+                slice = self.mesh.section(plane_origin=origin_temp,  plane_normal=self.nVec)
+                # 选取每个截面图中面积最大的子图，实现初步去噪
+                if slice is not None:
+                    slice_2D, to_3D = slice.to_planar()
+                    slices_splited = slice_2D.split()
+                    sliceIndex = np.argmax([s.area for s in slices_splited])
+                    slice_2D = slices_splited[sliceIndex]
+                    if slice_2D.area > 1e-1:
+                        sections.append(slice_2D.to_3D(to_3D))
+            except:
+                pass
+        
+        self.Intersections = sections
+        
+    def getIntersectionsFromSliceNum(self, sliceNum=5):
+        """Get the intersections of beam along nVec
+        
+        :param sliceNum: number of intersections
+        """
+        sections = []
+        extents = self.IntersectionScale # 截取区间
+        levels = np.linspace(*extents, sliceNum)  # 每隔 1m 截一次
         for i in range(len(levels)):
             origin_temp = self.centroid.copy()
             origin_temp[0] = origin_temp[0] + levels[i]
@@ -124,7 +152,6 @@ class SkeletonOfBeam:
         self.SkeletonPoints = []
         for s in self.Intersections:
             self.SkeletonPoints.append(s.centroid)
-        return self.SkeletonPoints
             
     def getNewCoordinate(self):
         """Get new XYZ coordinate with vector nVec as x-axis
@@ -199,7 +226,6 @@ class SkeletonOfBeam:
             sY = self.u_xyPlane.evalf(subs={'xi': xi_value})
             sZ = self.u_xyPlane.evalf(subs={'xi': xi_value})
             self.SkeletonPoints.append(sX*xVec + sY*yVec + sZ*zVec)
-        return self.SkeletonPoints
         
     def getNewIntersections(self):
         """Get the intersections of beam along vector [1, 0, 0]
@@ -207,6 +233,7 @@ class SkeletonOfBeam:
         :param step: interval of intersections
         """
         sections = []
+        sections2D = []
         xs = np.array(self.XYProjections)[:,0]
         L = xs[-1] - xs[0]
         xis = xs / L
@@ -225,10 +252,12 @@ class SkeletonOfBeam:
                     sliceIndex = np.argmax([s.area for s in slices_splited])
                     slice_2D = slices_splited[sliceIndex]
                     if slice_2D.area > 1e-1:
+                        sections2D.append(slice_2D)
                         sections.append(slice_2D.to_3D(to_3D))
             except:
                 pass
         
+        self.Intersections2D = sections2D
         self.Intersections = sections            
         
         
@@ -244,6 +273,26 @@ class SkeletonOfBeam:
         
         return tanVec.astype(np.float64)
     
+    def returnSkeletonPointsInXiRange(self, xi_s, xi_e, pNum=10):
+        points = []
+        
+        xVec, yVec, zVec = self.XYZCoordinate
+        xs = np.array(self.XYProjections)[:,0]
+        L = xs[-1] - xs[0]
+        
+        xis = np.linspace(xi_s, xi_e, pNum)
+        xs = xis * L
+        for i in range(len(xis)):
+            xi_value = xis[i]
+            sX = xs[i]
+            sY = self.u_xyPlane.evalf(subs={'xi': xi_value})
+            sZ = self.u_xyPlane.evalf(subs={'xi': xi_value})
+            points.append(sX*xVec + sY*yVec + sZ*zVec)
+        
+        return np.asarray(points).astype(np.float64)
+        
+        
+    
     def showIntersections(self, ifOverlapped=True):
         """Visualize the intersections in one graph
         params:
@@ -251,20 +300,12 @@ class SkeletonOfBeam:
             else Flase, each intersection will be plotted in order
         """
         if ifOverlapped:
-            c2s = []
-            for c3 in self.Intersections:
-                c2, to_3D = c3.to_planar()
-                slices_splited = c2.split()
-                sliceIndex = np.argmax([s.area for s in slices_splited])
-                c2s.append(slices_splited[sliceIndex]) 
-            combined = np.sum(c2s)
+            combined = np.sum(self.Intersections2D)
             combined.show()
         else:
-            for c3 in self.Intersections:
-                c2, to_3D = c3.to_planar()
-                slices_splited = c2.split()
-                sliceIndex = np.argmax([s.area for s in slices_splited])
-                slices_splited[sliceIndex].show()
+            for c2 in self.Intersections2D:
+                c2.show()
+                
     
     def _H(self, xs, L, ifsymbol=False): 
         h2 = 1 - 3*xs**2 + 2*xs**3
