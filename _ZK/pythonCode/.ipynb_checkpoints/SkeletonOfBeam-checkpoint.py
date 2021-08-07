@@ -36,11 +36,17 @@ class SkeletonOfBeam:
     XYProjections = None
     XZProjections = None
     
+    u_xyPlane = None
+    u_xzPlane = None
+    alpha_xyPlane = None
+    alpha_xzPlane = None
     # Sympy derivation of the projection of skeleton curve on x-y plane
     # Calculate the derivation value by using dudx_xyPlane.evalf(subs={'xi': xi_value})
     # where xi_value in [0, 1]
     dudx_xyPlane = None
     dudx_xzPlane = None # similar to dudx_xyPlane
+    
+    
     
     def __init__(self, mesh, rough_normalVector):
         self.mesh = mesh
@@ -187,15 +193,17 @@ class SkeletonOfBeam:
 
         # Calculate the derivation equation on x-y plane
         # Get the optimal parameters using least squre error method
-        a = sp.optimize.leastsq(errorValue, a_init, args=(ys, self._H(xis, L)))[0]
+        a1 = sp.optimize.leastsq(errorValue, a_init, args=(ys, self._H(xis, L)))[0]
+        self.alpha_xyPlane = a1
         
         # Derivation
         xi = sy.symbols('xi')
-        self.u_xyPlane = (self._H(xi, L, ifsymbol=True) * a).sum()
+        self.u_xyPlane = (self._H(xi, L, ifsymbol=True) * a1).sum()
         
         # Then calculate the derivation equation on x-z plane
-        a = sp.optimize.leastsq(errorValue, a_init, args=(zs, self._H(xis, L)))[0]
-        self.u_xzPlane = (self._H(xi, L, ifsymbol=True) * a).sum()
+        a2 = sp.optimize.leastsq(errorValue, a_init, args=(zs, self._H(xis, L)))[0]
+        self.alpha_xzPlane = a2
+        self.u_xzPlane = (self._H(xi, L, ifsymbol=True) * a2).sum()
         
     
     def getDerivativeSkeletonEqs(self):
