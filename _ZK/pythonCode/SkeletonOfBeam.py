@@ -28,13 +28,16 @@ class SkeletonOfBeam:
     nVec = None
     
     IntersectionScale = None # scale along the nVec to get Intersections
-    Intersections = None
-    Intersections2D = None
-    SkeletonPoints = None # centroids of the intersections
+    Intersections = []
+    Intersections2D = []
+    SkeletonPoints = [] # centroids of the intersections
     
     XYZCoordinate = None # 3*3 array, first line = x-axis ...
-    XYProjections = None
-    XZProjections = None
+    XYProjections = []
+    XZProjections = []
+    coorOrigin = None
+    
+    L = None
     
     u_xyPlane = None
     u_xzPlane = None
@@ -45,8 +48,6 @@ class SkeletonOfBeam:
     # where xi_value in [0, 1]
     dudx_xyPlane = None
     dudx_xzPlane = None # similar to dudx_xyPlane
-    
-    
     
     def __init__(self, mesh, rough_normalVector):
         self.mesh = mesh
@@ -174,6 +175,7 @@ class SkeletonOfBeam:
         """    
         x, y, z = self.XYZCoordinate
         origin = self.SkeletonPoints[0]
+        self.coorOrigin = origin
         self.XYProjections = [GeometryToolBox.projected_point(p, origin, x, y) for p in self.SkeletonPoints]
         self.XZProjections = [GeometryToolBox.projected_point(p, origin, x, z) for p in self.SkeletonPoints]
         
@@ -186,6 +188,7 @@ class SkeletonOfBeam:
         zs = np.array(self.XZProjections)[:,1]
 
         L = xs[-1] - xs[0]
+        self.L = L
         xis = xs / L
 
         errorValue = lambda x,y,A: y - np.dot(A, x)
@@ -294,7 +297,7 @@ class SkeletonOfBeam:
             xi_value = xis[i]
             sX = xs[i]
             sY = self.u_xyPlane.evalf(subs={'xi': xi_value})
-            sZ = self.u_xyPlane.evalf(subs={'xi': xi_value})
+            sZ = self.u_xzPlane.evalf(subs={'xi': xi_value})
             points.append(sX*xVec + sY*yVec + sZ*zVec)
         
         return np.asarray(points).astype(np.float64)
@@ -316,6 +319,17 @@ class SkeletonOfBeam:
                 
     
     def _H(self, xs, L, ifsymbol=False): 
+        h2 = 1 - 3*xs**2 + 2*xs**3
+        h3 = xs*(1 - 2*xs + xs**2)*L
+        h5 = xs**2*(3 - 2*xs)
+        h6 = xs**2*(xs - 1)*L
+        if ifsymbol:
+            return np.array([h2, h3, h5, h6])
+        else:
+            return np.hstack((h2.reshape(len(xs), -1), h3.reshape(len(xs), -1), 
+                              h5.reshape(len(xs), -1), h6.reshape(len(xs), -1)))
+        
+    def H(xs, L, ifsymbol=False): 
         h2 = 1 - 3*xs**2 + 2*xs**3
         h3 = xs*(1 - 2*xs + xs**2)*L
         h5 = xs**2*(3 - 2*xs)
