@@ -1,0 +1,5 @@
+{"python.analysis.extraPaths": [
+    ".c:/users/86183/anaconda3/lib/site-packages (0.11.2)",　　　　　　　　// 自定义模块的相对路径，可多个，可绝对路径　　
+    "./open3d"
+]
+}
