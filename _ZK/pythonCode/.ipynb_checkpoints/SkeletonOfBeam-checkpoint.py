@@ -301,6 +301,9 @@ class SkeletonOfBeam:
             points.append(sX*xVec + sY*yVec + sZ*zVec)
         
         return np.asarray(points).astype(np.float64)
+    
+    def returnAvgIntersectionArea(self):
+        return 0
         
         
     
@@ -373,3 +376,135 @@ class GeometryToolBox:
         s2 = np.dot(pVec, yVec)
 
         return [s1, s2]
+    
+#----------------------------------------------------------------------------------------------------
+
+class SegsOfSOB:
+    mSob = None
+    mesh = None 
+    n = None
+    
+    aYs = []
+    aZs = []
+    
+    nSobs = []
+    
+    us_xyPlane = []
+    us_xzPlane = []
+    dudxs_xyPlane = []
+    dudxs_xyPlane = []
+    
+    def __init__(self, motherSob, n):
+        self.mSob = motherSob
+        self.mesh = motherSob.mesh.copy()
+        self.n = n
+        
+    def getSobs(self):
+        xVec, yVec, zVec = self.mSob.XYZCoordinate
+        xis = np.linspace(0, 1, 10)
+        segL = self.mSob.L / self.n
+        for i in range(self.n):
+            print("Getting {}th sub-beam's Info...".format(i))
+            sY = self.dudxs_xyPlane[i].evalf(subs={'xi': 0}) # scalar y
+            sZ = self.dudxs_xzPlane[i].evalf(subs={'xi': 0}) # scalar z
+            nVec = xVec + sY*yVec + sZ*zVec
+
+            sp = []
+            for j in range(len(xis)):
+                xi_value = xis[j]
+                sX = xi_value * segL + segL * i
+                sY = self.us_xyPlane[i].evalf(subs={'xi': xi_value})
+                sZ = self.us_xzPlane[i].evalf(subs={'xi': xi_value})
+                sp.append((sX*xVec + sY*yVec + sZ*zVec).astype('float'))
+            
+            sob = SkeletonOfBeam(self.mesh, np.array(nVec).astype('float'))
+            sob.SkeletonPoints = sp
+            
+            print("Constructing {}th sub-beam...".format(i))
+            sob.getNewCoordinate()
+            sob.getProjections()
+            sob.getSkeletonEqs()
+            sob.getDerivativeSkeletonEqs()
+
+            sob.getNewSkeletonPoints()
+            sob.getNewIntersections()
+            print("Done.")
+            self.nSobs.append(sob)
+                        
+    def getNewA(self):
+        n = self.n
+        m = 4*n + 1
+        sob = self.mSob
+
+        L = self.mSob.L
+        u_xy = self.mSob.u_xyPlane
+        u_xz = self.mSob.u_xzPlane
+
+        # Get global xi
+        if m > 2:
+            dis = 1/(m-1)
+            xis_global = [(i+1)*dis for i in range(m-2)]
+        xis_global = [0] + xis_global + [1]
+
+        # Get local xi
+        # and indexes for separations
+        xis_local = (np.array(xis_global) % (1/n)) / (1/n)
+        xis_local[-1] = 1
+        separateIndex = [0]
+        for i in range(len(xis_local)):
+            if i == 0: pass
+            else:
+                if xis_local[i] <= xis_local[i-1]:
+                    separateIndex.append(i)
+        separateIndex.append(-1)
+
+        # Get u in y and z
+        uYs = []
+        uZs = []
+        for xi_value in xis_global:
+            uY = u_xy.evalf(subs={'xi': xi_value})
+            uZ = u_xz.evalf(subs={'xi': xi_value})
+            uYs.append(uY)
+            uZs.append(uZ)
+
+        # Get N
+        N = np.zeros((m, 2*(n+1)))
+        segL = L/n
+        for i in range(len(separateIndex)-1):        
+            xis = xis_local[separateIndex[i]:separateIndex[i+1]]
+            if separateIndex[i+1] == -1:
+                xis = np.append(xis, xis_local[-1])
+
+            if separateIndex[i+1] == -1:
+                N[separateIndex[i]:, i*2:] = SkeletonOfBeam.H(xis, segL)
+            else:
+                N[separateIndex[i]:separateIndex[i+1], i*2:i*2+4] = SkeletonOfBeam.H(xis, segL)
+                
+        a_init = np.array([1] * 2*(n+1))
+        errorValue = lambda x,y,A: y - np.dot(A, x)
+        
+        self.aYs = sp.optimize.leastsq(errorValue, a_init, args=(np.asarray(uYs).astype('float'), np.asarray(N).astype('float')))[0]
+        self.aZs = sp.optimize.leastsq(errorValue, a_init, args=(np.asarray(uZs).astype('float'), np.asarray(N).astype('float')))[0]
+        # self.aYs = np.dot(np.linalg.pinv(N), uYs).astype('float')
+        # self.aZs = np.dot(np.linalg.pinv(N), uZs).astype('float')
+        
+    def getNewEqs(self):
+        self.us_xyPlane = []
+        self.us_xzPlane = []
+        xi = sy.symbols('xi')
+        segL = self.mSob.L / self.n
+        for i in range(self.n):
+            if i == self.n - 1:
+                aY = self.aYs[i*2:]
+                aZ = self.aZs[i*2:]
+            else:
+                aY = self.aYs[i*2:i*2+4]
+                aZ = self.aZs[i*2:i*2+4]
+            self.us_xyPlane.append((SkeletonOfBeam.H(xi, segL, ifsymbol=True) * aY).sum())
+            self.us_xzPlane.append((SkeletonOfBeam.H(xi, segL, ifsymbol=True) * aZ).sum())
+            
+    def getNewDerivativeEqs(self):
+        xi = sy.symbols('xi')
+        segL = self.mSob.L / self.n
+        self.dudxs_xyPlane = [sy.diff(u, xi) / segL for u in self.us_xyPlane]
+        self.dudxs_xzPlane = [sy.diff(u, xi) / segL for u in self.us_xzPlane]
