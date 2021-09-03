@@ -1,0 +1,16 @@
+{
+    "name": "Python",
+    "type": "python",
+    "request": "launch",
+    "stopOnEntry": false,
+    "python": "${command:python.interpreterPath}",
+    "program": "${file}",
+    "cwd": "${workspaceRoot}",
+    "env": {"PYTHONPATH":"${workspaceRoot}"},
+    "envFile": "${workspaceRoot}/.env",
+    "debugOptions": [
+        "WaitOnAbnormalExit",
+        "WaitOnNormalExit",
+        "RedirectOutput"
+    ]
+}
